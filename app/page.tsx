@@ -566,56 +566,52 @@ function AssessingPhase({
   ]
 
   return (
-    <div className="h-screen flex flex-col bg-slate-900">
-      {/* Top bar — student progress */}
-      <div className="flex items-center justify-between px-5 py-3 bg-slate-800 border-b border-slate-700">
+    <div className="h-[100dvh] flex flex-col bg-slate-900">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800 border-b border-slate-700 flex-none">
+        <span className="text-white font-semibold text-sm truncate max-w-[40%]">
+          {state.sessionTitle || 'VBA'}
+        </span>
         <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-          <span className="text-white font-semibold text-sm">
-            {state.sessionTitle || 'VBA Assessment'}
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* Student progress pips */}
-          <div className="flex gap-1">
+          {/* Pips: hidden on small screens, shown on md+ */}
+          <div className="hidden md:flex gap-1">
             {state.students.map((_, i) => (
               <span
                 key={i}
-                className={`w-4 h-1.5 rounded-full transition-colors ${
-                  i < state.currentStudentIndex
-                    ? 'bg-indigo-400'
-                    : i === state.currentStudentIndex
-                    ? 'bg-white'
-                    : 'bg-slate-600'
+                className={`w-3 h-1.5 rounded-full transition-colors ${
+                  i < state.currentStudentIndex ? 'bg-indigo-400'
+                  : i === state.currentStudentIndex ? 'bg-white'
+                  : 'bg-slate-600'
                 }`}
               />
             ))}
           </div>
-          <span className="text-slate-400 text-xs">
-            Student {state.currentStudentIndex + 1}/{totalStudents}
+          <span className="text-slate-300 text-xs font-medium whitespace-nowrap">
+            Student {state.currentStudentIndex + 1} / {totalStudents}
           </span>
           <button
             onClick={() => setState(prev => ({ ...prev, phase: 'setup' }))}
-            className="text-slate-400 hover:text-white text-xs transition"
+            className="text-slate-400 hover:text-white text-xs transition px-2 py-1 rounded"
           >
             ← Setup
           </button>
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* LEFT — Stimulus (changes per stimulus within a student) */}
-        <div className="w-3/5 bg-white overflow-y-auto">
-          <div className="p-8 space-y-5 max-w-2xl">
+      {/* Body — stacked on mobile, side-by-side on lg+ */}
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+
+        {/* Stimulus panel — scrollable, takes remaining space on mobile */}
+        <div className="flex-1 min-h-0 overflow-y-auto bg-white lg:w-3/5 lg:flex-none">
+          <div className="p-5 md:p-8 space-y-4 max-w-2xl">
             <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-lg uppercase tracking-widest">
               Stimulus {stimulusIdx + 1} of {totalStimuli}
             </span>
-            <h2 className="text-2xl font-bold text-slate-900 leading-tight">
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight">
               {stimulus.title || `Stimulus ${stimulusIdx + 1}`}
             </h2>
             {stimulus.text && (
-              <p className="text-xl leading-9 text-slate-700 whitespace-pre-wrap font-serif tracking-wide">
+              <p className="text-base md:text-xl leading-8 md:leading-9 text-slate-700 whitespace-pre-wrap font-serif tracking-wide">
                 {stimulus.text}
               </p>
             )}
@@ -629,18 +625,19 @@ function AssessingPhase({
           </div>
         </div>
 
-        {/* RIGHT — Score current student across stimuli */}
-        <div className="w-2/5 bg-slate-50 border-l border-slate-200 overflow-y-auto">
-          <div className="p-5 space-y-4">
-            {/* Student name + overall progress */}
+        {/* Scoring panel — fixed-height bottom sheet on mobile, right column on lg+ */}
+        <div className="flex-none bg-slate-50 border-t border-slate-200 lg:border-t-0 lg:border-l lg:w-2/5 lg:overflow-y-auto">
+          <div className="p-4 md:p-5 space-y-3">
+
+            {/* Student name + progress bar */}
             <div>
               <div className="flex items-baseline justify-between mb-1">
-                <h3 className="text-xl font-bold text-slate-900">{student.name}</h3>
-                <span className="text-xs text-slate-400 font-medium">
+                <h3 className="text-lg font-bold text-slate-900 truncate">{student.name}</h3>
+                <span className="text-xs text-slate-400 font-medium ml-2 flex-none">
                   {state.currentStudentIndex + 1} / {totalStudents}
                 </span>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+              <div className="w-full bg-slate-200 rounded-full h-1 overflow-hidden">
                 <div
                   className="h-full bg-indigo-500 rounded-full transition-all duration-300"
                   style={{ width: `${studentProgressPct}%` }}
@@ -648,8 +645,8 @@ function AssessingPhase({
               </div>
             </div>
 
-            {/* Stimulus progress pills for this student */}
-            <div className="flex flex-wrap gap-2">
+            {/* Stimulus progress pills */}
+            <div className="flex flex-wrap gap-1.5">
               {state.stimulusItems.map((item, i) => {
                 const s = state.scores.find(
                   sc => sc.studentId === student.id && sc.stimulusId === item.id
@@ -659,7 +656,7 @@ function AssessingPhase({
                 return (
                   <div
                     key={item.id}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition ${
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border-2 transition ${
                       chip
                         ? `${chip.bg} ${chip.text} border-transparent`
                         : isCurrent
@@ -667,25 +664,30 @@ function AssessingPhase({
                         : 'border-slate-200 text-slate-400 bg-white'
                     }`}
                   >
-                    {chip ? `${item.title || `S${i + 1}`}: ${chip.label}` : (item.title || `Stimulus ${i + 1}`)}
+                    {chip
+                      ? `${item.title || `S${i + 1}`}: ${chip.label}`
+                      : item.title || `Stimulus ${i + 1}`}
                   </div>
                 )
               })}
             </div>
 
-            {/* Score input or "done" state */}
+            {/* Score buttons or done state */}
             {!allStimuliDone ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-                <p className="text-xs text-slate-400 font-medium">
-                  Scoring: <span className="text-slate-600 font-semibold">{stimulus.title || `Stimulus ${stimulusIdx + 1}`}</span>
-                  <span className="ml-2 text-slate-300">· keyboard 1–5</span>
+              <div className="space-y-2">
+                <p className="text-xs text-slate-400">
+                  Scoring: <span className="text-slate-600 font-semibold">
+                    {stimulus.title || `Stimulus ${stimulusIdx + 1}`}
+                  </span>
+                  <span className="hidden md:inline ml-2 text-slate-300">· keyboard 1–5</span>
                 </p>
+                {/* Score buttons — large tap targets */}
                 <div className="grid grid-cols-5 gap-2">
                   {[1, 2, 3, 4, 5].map((n, i) => (
                     <button
                       key={n}
                       onClick={() => scoreAndAdvance(n)}
-                      className={`aspect-square flex items-center justify-center text-2xl font-bold rounded-xl border-2 bg-white transition-all active:scale-95 ${scoreStyles[i]}`}
+                      className={`h-14 md:h-16 flex items-center justify-center text-2xl font-bold rounded-xl border-2 bg-white transition-all active:scale-95 ${scoreStyles[i]}`}
                     >
                       {n}
                     </button>
@@ -693,13 +695,13 @@ function AssessingPhase({
                 </div>
                 <button
                   onClick={() => scoreAndAdvance(null)}
-                  className="w-full py-2.5 text-sm text-slate-500 border border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition font-medium"
+                  className="w-full py-3 text-sm text-slate-500 border border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-white transition font-medium"
                 >
                   Mark Absent
                 </button>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-emerald-200 p-5 text-center shadow-sm space-y-3">
+              <div className="bg-white rounded-2xl border border-emerald-200 p-4 text-center space-y-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
                   <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -710,9 +712,9 @@ function AssessingPhase({
                 </p>
                 <button
                   onClick={nextStudent}
-                  className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition shadow-sm active:scale-[0.99]"
+                  className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition active:scale-[0.99]"
                 >
-                  {isLastStudent ? 'View Results →' : `Next Student →`}
+                  {isLastStudent ? 'View Results →' : 'Next Student →'}
                 </button>
               </div>
             )}
