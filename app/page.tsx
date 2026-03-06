@@ -170,15 +170,13 @@ export default function VBAApp() {
         { studentId: student.id, stimulusId: stimulus.id, score },
       ]
 
-      const nextStudent = prev.currentStudentIndex + 1
-      if (nextStudent < prev.students.length)
-        return { ...prev, scores, currentStudentIndex: nextStudent }
-
+      // Advance through stimuli first, then move to next student
       const nextStimulus = prev.currentStimulusIndex + 1
       if (nextStimulus < prev.stimulusItems.length)
-        return { ...prev, scores, currentStimulusIndex: nextStimulus, currentStudentIndex: 0 }
+        return { ...prev, scores, currentStimulusIndex: nextStimulus }
 
-      return { ...prev, scores, phase: 'results' }
+      // All stimuli done for this student — stay here (UI shows "Next Student" button)
+      return { ...prev, scores, currentStimulusIndex: nextStimulus }
     })
   }, [])
 
@@ -538,19 +536,23 @@ function AssessingPhase({
   setState: React.Dispatch<React.SetStateAction<SessionState>>
   scoreAndAdvance: (score: number | null) => void
 }) {
-  const stimulus = state.stimulusItems[state.currentStimulusIndex]
-  const student = state.students[state.currentStudentIndex]
   const totalStimuli = state.stimulusItems.length
   const totalStudents = state.students.length
-  const allDone = state.currentStudentIndex >= totalStudents
-  const isLastStimulus = state.currentStimulusIndex === totalStimuli - 1
-  const doneScores = state.scores.filter(s => s.stimulusId === stimulus.id)
-  const progressPct = (state.currentStudentIndex / totalStudents) * 100
+  const student = state.students[state.currentStudentIndex]
+  const allStimuliDone = state.currentStimulusIndex >= totalStimuli
+  // Show last stimulus on the left when all are done (for context)
+  const stimulusIdx = allStimuliDone ? totalStimuli - 1 : state.currentStimulusIndex
+  const stimulus = state.stimulusItems[stimulusIdx]
+  const isLastStudent = state.currentStudentIndex === totalStudents - 1
+  const studentProgressPct = (state.currentStudentIndex / totalStudents) * 100
 
-  function jumpNext() {
-    const next = state.currentStimulusIndex + 1
-    if (next < totalStimuli)
-      setState(prev => ({ ...prev, currentStimulusIndex: next, currentStudentIndex: 0 }))
+  // Scores for the current student across all stimuli
+  const studentScores = state.scores.filter(s => s.studentId === student?.id)
+
+  function nextStudent() {
+    const next = state.currentStudentIndex + 1
+    if (next < totalStudents)
+      setState(prev => ({ ...prev, currentStudentIndex: next, currentStimulusIndex: 0 }))
     else
       setState(prev => ({ ...prev, phase: 'results' }))
   }
@@ -565,7 +567,7 @@ function AssessingPhase({
 
   return (
     <div className="h-screen flex flex-col bg-slate-900">
-      {/* Top bar */}
+      {/* Top bar — student progress */}
       <div className="flex items-center justify-between px-5 py-3 bg-slate-800 border-b border-slate-700">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
@@ -574,14 +576,15 @@ function AssessingPhase({
           </span>
         </div>
         <div className="flex items-center gap-4">
+          {/* Student progress pips */}
           <div className="flex gap-1">
-            {state.stimulusItems.map((_, i) => (
+            {state.students.map((_, i) => (
               <span
                 key={i}
-                className={`w-6 h-1.5 rounded-full transition-colors ${
-                  i < state.currentStimulusIndex
+                className={`w-4 h-1.5 rounded-full transition-colors ${
+                  i < state.currentStudentIndex
                     ? 'bg-indigo-400'
-                    : i === state.currentStimulusIndex
+                    : i === state.currentStudentIndex
                     ? 'bg-white'
                     : 'bg-slate-600'
                 }`}
@@ -589,7 +592,7 @@ function AssessingPhase({
             ))}
           </div>
           <span className="text-slate-400 text-xs">
-            Stimulus {state.currentStimulusIndex + 1}/{totalStimuli}
+            Student {state.currentStudentIndex + 1}/{totalStudents}
           </span>
           <button
             onClick={() => setState(prev => ({ ...prev, phase: 'setup' }))}
@@ -602,16 +605,14 @@ function AssessingPhase({
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* LEFT — Stimulus */}
+        {/* LEFT — Stimulus (changes per stimulus within a student) */}
         <div className="w-3/5 bg-white overflow-y-auto">
           <div className="p-8 space-y-5 max-w-2xl">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-lg uppercase tracking-widest">
-                {state.currentStimulusIndex + 1} of {totalStimuli}
-              </span>
-            </div>
+            <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-lg uppercase tracking-widest">
+              Stimulus {stimulusIdx + 1} of {totalStimuli}
+            </span>
             <h2 className="text-2xl font-bold text-slate-900 leading-tight">
-              {stimulus.title || `Stimulus ${state.currentStimulusIndex + 1}`}
+              {stimulus.title || `Stimulus ${stimulusIdx + 1}`}
             </h2>
             {stimulus.text && (
               <p className="text-xl leading-9 text-slate-700 whitespace-pre-wrap font-serif tracking-wide">
@@ -628,51 +629,75 @@ function AssessingPhase({
           </div>
         </div>
 
-        {/* RIGHT — Scoring */}
-        <div className="w-2/5 bg-slate-50 border-l border-slate-200 overflow-y-auto flex flex-col">
-          <div className="flex-1 p-5 space-y-5">
-            {!allDone ? (
-              <>
-                {/* Student info */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                  <div className="flex items-baseline justify-between mb-1">
-                    <h3 className="text-lg font-bold text-slate-900">{student.name}</h3>
-                    <span className="text-xs text-slate-400 font-medium">
-                      {state.currentStudentIndex + 1} / {totalStudents}
-                    </span>
-                  </div>
-                  {/* Progress bar */}
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden mb-4">
-                    <div
-                      className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                      style={{ width: `${progressPct}%` }}
-                    />
-                  </div>
+        {/* RIGHT — Score current student across stimuli */}
+        <div className="w-2/5 bg-slate-50 border-l border-slate-200 overflow-y-auto">
+          <div className="p-5 space-y-4">
+            {/* Student name + overall progress */}
+            <div>
+              <div className="flex items-baseline justify-between mb-1">
+                <h3 className="text-xl font-bold text-slate-900">{student.name}</h3>
+                <span className="text-xs text-slate-400 font-medium">
+                  {state.currentStudentIndex + 1} / {totalStudents}
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                  style={{ width: `${studentProgressPct}%` }}
+                />
+              </div>
+            </div>
 
-                  {/* Score buttons */}
-                  <p className="text-xs text-slate-400 mb-3 font-medium">
-                    Tap score · keyboard 1–5
-                  </p>
-                  <div className="grid grid-cols-5 gap-2">
-                    {[1, 2, 3, 4, 5].map((n, i) => (
-                      <button
-                        key={n}
-                        onClick={() => scoreAndAdvance(n)}
-                        className={`aspect-square flex items-center justify-center text-2xl font-bold rounded-xl border-2 bg-white transition-all active:scale-95 ${scoreStyles[i]}`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => scoreAndAdvance(null)}
-                    className="mt-3 w-full py-2.5 text-sm text-slate-500 border border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition font-medium"
+            {/* Stimulus progress pills for this student */}
+            <div className="flex flex-wrap gap-2">
+              {state.stimulusItems.map((item, i) => {
+                const s = state.scores.find(
+                  sc => sc.studentId === student.id && sc.stimulusId === item.id
+                )
+                const isCurrent = i === state.currentStimulusIndex && !allStimuliDone
+                const chip = s ? scoreChip(s.score) : null
+                return (
+                  <div
+                    key={item.id}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition ${
+                      chip
+                        ? `${chip.bg} ${chip.text} border-transparent`
+                        : isCurrent
+                        ? 'border-indigo-500 text-indigo-600 bg-white'
+                        : 'border-slate-200 text-slate-400 bg-white'
+                    }`}
                   >
-                    Mark Absent
-                  </button>
+                    {chip ? `${item.title || `S${i + 1}`}: ${chip.label}` : (item.title || `Stimulus ${i + 1}`)}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Score input or "done" state */}
+            {!allStimuliDone ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+                <p className="text-xs text-slate-400 font-medium">
+                  Scoring: <span className="text-slate-600 font-semibold">{stimulus.title || `Stimulus ${stimulusIdx + 1}`}</span>
+                  <span className="ml-2 text-slate-300">· keyboard 1–5</span>
+                </p>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map((n, i) => (
+                    <button
+                      key={n}
+                      onClick={() => scoreAndAdvance(n)}
+                      className={`aspect-square flex items-center justify-center text-2xl font-bold rounded-xl border-2 bg-white transition-all active:scale-95 ${scoreStyles[i]}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
                 </div>
-              </>
+                <button
+                  onClick={() => scoreAndAdvance(null)}
+                  className="w-full py-2.5 text-sm text-slate-500 border border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition font-medium"
+                >
+                  Mark Absent
+                </button>
+              </div>
             ) : (
               <div className="bg-white rounded-2xl border border-emerald-200 p-5 text-center shadow-sm space-y-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
@@ -680,38 +705,15 @@ function AssessingPhase({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p className="text-sm font-semibold text-slate-700">All {totalStudents} students scored</p>
+                <p className="text-sm font-semibold text-slate-700">
+                  All stimuli scored for {student.name}
+                </p>
                 <button
-                  onClick={jumpNext}
+                  onClick={nextStudent}
                   className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition shadow-sm active:scale-[0.99]"
                 >
-                  {isLastStimulus ? 'View Results →' : 'Next Stimulus →'}
+                  {isLastStudent ? 'View Results →' : `Next Student →`}
                 </button>
-              </div>
-            )}
-
-            {/* Scored list */}
-            {doneScores.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-                  Scored
-                </p>
-                <div className="space-y-2">
-                  {doneScores.map(s => {
-                    const name = state.students.find(st => st.id === s.studentId)?.name ?? '?'
-                    const chip = scoreChip(s.score)
-                    return (
-                      <div key={s.studentId} className="flex items-center justify-between">
-                        <span className="text-sm text-slate-700">{name}</span>
-                        <span
-                          className={`text-xs font-bold px-2.5 py-1 rounded-full ${chip.bg} ${chip.text}`}
-                        >
-                          {chip.label}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
               </div>
             )}
           </div>
