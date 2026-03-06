@@ -210,24 +210,41 @@ function SetupPhase({
   setState: React.Dispatch<React.SetStateAction<SessionState>>
   nextStimulusId: React.MutableRefObject<number>
 }) {
-  const [studentMode, setStudentMode] = useState<'count' | 'names'>('count')
-  const [studentCount, setStudentCount] = useState('')
-  const [studentNames, setStudentNames] = useState('')
+  const [selectedClassIdx, setSelectedClassIdx] = useState<number | null>(null)
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
   const canStart = state.students.length > 0 && state.stimulusItems.length > 0
 
-  function applyStudents() {
-    if (studentMode === 'count') {
-      const n = parseInt(studentCount)
-      if (isNaN(n) || n < 1) return
-      setState(prev => ({
-        ...prev,
-        students: Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `Student ${i + 1}` })),
-      }))
+  function selectClass(idx: number) {
+    const preset = STUDENT_PRESETS[idx]
+    const students: Student[] = preset.names.map((name, i) => ({ id: i + 1, name }))
+    const ids = new Set(students.map(s => s.id))
+    setSelectedClassIdx(idx)
+    setCheckedIds(ids)
+    setState(prev => ({ ...prev, students }))
+  }
+
+  function toggleStudent(id: number) {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      const preset = STUDENT_PRESETS[selectedClassIdx!]
+      const allStudents: Student[] = preset.names.map((name, i) => ({ id: i + 1, name }))
+      setState(s => ({ ...s, students: allStudents.filter(st => next.has(st.id)) }))
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selectedClassIdx === null) return
+    const preset = STUDENT_PRESETS[selectedClassIdx]
+    const allStudents: Student[] = preset.names.map((name, i) => ({ id: i + 1, name }))
+    if (checkedIds.size === allStudents.length) {
+      setCheckedIds(new Set())
+      setState(prev => ({ ...prev, students: [] }))
     } else {
-      const students = studentNames
-        .split(',').map(s => s.trim()).filter(Boolean)
-        .map((name, i) => ({ id: i + 1, name }))
-      setState(prev => ({ ...prev, students }))
+      setCheckedIds(new Set(allStudents.map(s => s.id)))
+      setState(prev => ({ ...prev, students: allStudents }))
     }
   }
 
@@ -303,82 +320,74 @@ function SetupPhase({
         <Card>
           <Label>Students</Label>
 
-          {/* Student presets */}
-          <div className="mt-2 mb-3">
-            <p className="text-xs text-slate-400 mb-2 font-medium">Load a sample class:</p>
-            <div className="flex flex-wrap gap-2">
-              {STUDENT_PRESETS.map(preset => (
-                <button
-                  key={preset.label}
-                  onClick={() =>
-                    setState(prev => ({
-                      ...prev,
-                      students: preset.names.map((name, i) => ({ id: i + 1, name })),
-                    }))
-                  }
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 transition"
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-2 mb-3">
-            {(['count', 'names'] as const).map(mode => (
+          {/* Class picker */}
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {STUDENT_PRESETS.map((preset, idx) => (
               <button
-                key={mode}
-                onClick={() => setStudentMode(mode)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                  studentMode === mode
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                key={preset.label}
+                onClick={() => selectClass(idx)}
+                className={`py-3 rounded-xl border-2 text-sm font-semibold transition ${
+                  selectedClassIdx === idx
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
                 }`}
               >
-                {mode === 'count' ? 'Auto-name by count' : 'Paste names'}
+                <span className="block">{preset.label.split('·')[0].trim()}</span>
+                <span className="block text-xs font-normal text-slate-400 mt-0.5">
+                  {preset.names.length} students
+                </span>
               </button>
             ))}
           </div>
 
-          {studentMode === 'count' ? (
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min={1}
-                max={60}
-                className="w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                placeholder="12"
-                value={studentCount}
-                onChange={e => setStudentCount(e.target.value)}
-              />
-              <button onClick={applyStudents} className="btn-secondary">Apply</button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <textarea
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                rows={3}
-                placeholder="Riya, Aman, Priya, Karan, Divya…"
-                value={studentNames}
-                onChange={e => setStudentNames(e.target.value)}
-              />
-              <button onClick={applyStudents} className="btn-secondary">Apply</button>
-            </div>
-          )}
-
-          {state.students.length > 0 && (
-            <div className="mt-3 flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                {state.students.length}
-              </span>
-              <p className="text-sm text-slate-600">
-                {state.students.slice(0, 5).map(s => s.name).join(', ')}
-                {state.students.length > 5 && (
-                  <span className="text-slate-400"> +{state.students.length - 5} more</span>
-                )}
-              </p>
-            </div>
-          )}
+          {/* Student checklist */}
+          {selectedClassIdx !== null && (() => {
+            const preset = STUDENT_PRESETS[selectedClassIdx]
+            const allStudents: Student[] = preset.names.map((name, i) => ({ id: i + 1, name }))
+            const allChecked = checkedIds.size === allStudents.length
+            return (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-slate-500 font-medium">
+                    {checkedIds.size} of {allStudents.length} selected
+                  </p>
+                  <button
+                    onClick={toggleAll}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition"
+                  >
+                    {allChecked ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {allStudents.map(student => {
+                    const checked = checkedIds.has(student.id)
+                    return (
+                      <button
+                        key={student.id}
+                        onClick={() => toggleStudent(student.id)}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition ${
+                          checked
+                            ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
+                            : 'border-slate-200 bg-white text-slate-400 line-through'
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2 transition ${
+                          checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                        }`}>
+                          {checked && (
+                            <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                        {student.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </Card>
 
         {/* Stimulus items */}
