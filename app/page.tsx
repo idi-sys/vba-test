@@ -16,8 +16,10 @@ export default function VBAApp() {
       const saved = localStorage.getItem(LS_KEY)
       if (saved) {
         const parsed = JSON.parse(saved) as SessionState
-        // Detect old format (scores had a numeric `score` field) — clear and start fresh
-        const isLegacy = parsed.scores?.some(isLegacyScore)
+        // Detect old formats — clear and start fresh
+        const isLegacy =
+          parsed.scores?.some(isLegacyScore) ||
+          parsed.stimulusItems?.some((s: any) => !s.type)
         if (isLegacy) {
           localStorage.removeItem(LS_KEY)
         } else {
