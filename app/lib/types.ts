@@ -64,7 +64,13 @@ export function scoreLabel(score: Score): string {
   if (score.mcqResult === 'wrong') return '✗'
   if (score.mcqResult === 'no_response') return 'NR'
   if (score.dropdownValue !== undefined) return String(score.dropdownValue)
-  if (score.incorrectWords !== undefined) return `${score.incorrectWords.length}✗`
+  if (score.incorrectWords !== undefined) {
+    const errs = score.incorrectWords.length
+    const read = score.lastWordIndex !== null && score.lastWordIndex !== undefined
+      ? `${score.lastWordIndex + 1} read`
+      : ''
+    return [read, errs > 0 ? `${errs}✗` : '0✗'].filter(Boolean).join(' · ')
+  }
   return '—'
 }
 

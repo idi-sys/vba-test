@@ -297,7 +297,11 @@ export default function AssessingPhase({
       setState(prev => ({ ...prev, phase: 'results' }))
   }
 
-  const words = stimulus ? parseWords(stimulus.text) : []
+  const words = stimulus
+    ? stimulus.type === 'orf'
+      ? stimulus.text.split(/\s+/).filter(Boolean)
+      : parseWords(stimulus.text)
+    : []
 
   const canSubmit = stimulus && (
     stimulus.type === 'dropdown' ? dropdownValue !== ''
