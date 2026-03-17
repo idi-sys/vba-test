@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { SessionState, Score, formatSecs, parseWords } from '../lib/types'
 
 // ── Audience display components ───────────────────────────────────────────────
@@ -368,30 +368,59 @@ export default function AssessingPhase({
     return state.scores.filter(s => s.studentId === studentId).length
   }
 
+  const [mobileTab, setMobileTab] = useState<'stimulus' | 'score'>('score')
+
+  // Auto-switch to score tab when ORF timer ends so teacher sees stop-point UI
+  useEffect(() => {
+    if (orfMode === 'stop_point') setMobileTab('score')
+  }, [orfMode])
+
+  const timerControls = stimulus?.type === 'orf' && !allStimuliDone ? (
+    <div>
+      {orfMode === 'idle' && (
+        <button onClick={startTimer}
+          className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-semibold text-sm rounded-full transition active:scale-95">
+          start timer
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
+      )}
+      {orfMode === 'error_marking' && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-slate-900 rounded-full">
+          <span className="font-mono font-bold text-sm tabular-nums">{formatSecs(timerRemaining)}</span>
+          <button onClick={pauseTimer} className="hover:opacity-70 transition">
+            {timerStatus === 'running'
+              ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" /></svg>
+              : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            }
+          </button>
+          <button onClick={stopTimer} className="w-4 h-4 rounded-full bg-rose-500 hover:bg-rose-400 transition flex-shrink-0" />
+        </div>
+      )}
+      {orfMode === 'stop_point' && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-white/10 text-white/60 rounded-full text-xs">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          {skipped ? 'Auto-stopped' : 'Time up'} — mark stop point
+        </div>
+      )}
+    </div>
+  ) : null
+
   return (
     <div className="h-[100dvh] flex flex-col bg-[#1a1a2e] overflow-hidden">
 
       {/* Very top bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[#111] border-b border-white/10 text-xs text-white/60 flex-none">
-        <div className="flex items-center gap-4">
-          <button className="flex items-center gap-1.5 hover:text-white/90 transition">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-            SHOW TASKBAR
-          </button>
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#111] border-b border-white/10 text-xs text-white/60 flex-none">
+        <div className="hidden sm:flex items-center gap-3">
+          <span className="hover:text-white/90 transition cursor-default">SHOW TASKBAR</span>
           <span className="text-white/20">|</span>
-          <button className="flex items-center gap-1.5 hover:text-white/90 transition">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            DISPLAY SETTINGS ▾
-          </button>
+          <span className="hover:text-white/90 transition cursor-default">DISPLAY SETTINGS ▾</span>
         </div>
         <button
           onClick={() => setState(prev => ({ ...prev, phase: 'setup' }))}
-          className="flex items-center gap-1.5 hover:text-white/90 transition font-medium"
+          className="flex items-center gap-1.5 hover:text-white/90 transition font-medium ml-auto"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -401,10 +430,9 @@ export default function AssessingPhase({
       </div>
 
       {/* Timer + student review bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1a1a2e] border-b border-white/10 flex-none gap-4">
-        {/* Elapsed timer */}
+      <div className="flex items-center justify-between px-3 py-2 bg-[#1a1a2e] border-b border-white/10 flex-none gap-3">
         <div className="flex items-center gap-2 text-white flex-none">
-          <span className="text-base font-mono font-semibold tabular-nums">{formatSecs(elapsed)}</span>
+          <span className="text-sm font-mono font-semibold tabular-nums">{formatSecs(elapsed)}</span>
           <button onClick={() => setElapsed(0)} className="text-white/40 hover:text-white transition">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -412,53 +440,60 @@ export default function AssessingPhase({
           </button>
         </div>
 
-        {/* Student review pills — clickable to jump */}
-        <div className="flex items-center gap-1 overflow-x-auto flex-1 py-0.5">
+        {/* Student review pills */}
+        <div className="flex items-center gap-1 overflow-x-auto flex-1 py-0.5 scrollbar-none">
           {state.students.map((s, i) => {
             const done = studentProgress(s.id)
             const isCurrent = i === state.currentStudentIndex
             const isComplete = done >= totalStimuli
             return (
-              <button
-                key={s.id}
-                onClick={() => goToStudent(i)}
+              <button key={s.id} onClick={() => goToStudent(i)}
                 title={`${s.name} — ${done}/${totalStimuli} scored`}
-                className={`flex-none flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition ${
-                  isCurrent
-                    ? 'bg-indigo-500 text-white'
-                    : isComplete
-                    ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                    : 'bg-white/10 text-white/50 hover:bg-white/20 hover:text-white/80'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full flex-none ${
-                  isCurrent ? 'bg-white' : isComplete ? 'bg-emerald-400' : 'bg-white/30'
-                }`} />
+                className={`flex-none flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition ${
+                  isCurrent ? 'bg-indigo-500 text-white'
+                  : isComplete ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+                  : 'bg-white/10 text-white/50 hover:bg-white/20 hover:text-white/80'
+                }`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-none ${isCurrent ? 'bg-white' : isComplete ? 'bg-emerald-400' : 'bg-white/30'}`} />
                 {s.name.split(' ')[0]}
-                {done > 0 && !isCurrent && (
-                  <span className="opacity-60">{done}/{totalStimuli}</span>
-                )}
+                {done > 0 && !isCurrent && <span className="opacity-60">{done}/{totalStimuli}</span>}
               </button>
             )
           })}
         </div>
 
-        <div className="text-white/30 text-xs flex-none">
+        <div className="text-white/30 text-xs flex-none hidden sm:block">
           {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
+      </div>
+
+      {/* Mobile tab bar — hidden on lg+ */}
+      <div className="flex lg:hidden border-b border-white/10 flex-none bg-[#1a1a2e]">
+        <button onClick={() => setMobileTab('stimulus')}
+          className={`flex-1 py-2.5 text-xs font-semibold transition border-b-2 ${
+            mobileTab === 'stimulus' ? 'text-white border-indigo-400' : 'text-white/40 border-transparent'
+          }`}>
+          Stimulus
+        </button>
+        <button onClick={() => setMobileTab('score')}
+          className={`flex-1 py-2.5 text-xs font-semibold transition border-b-2 ${
+            mobileTab === 'score' ? 'text-white border-indigo-400' : 'text-white/40 border-transparent'
+          }`}>
+          Score {orfMode === 'stop_point' && <span className="ml-1 text-amber-400">●</span>}
+        </button>
       </div>
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
 
         {/* Left — Audience Display */}
-        <div className="flex flex-col flex-1 min-w-0 bg-[#2a2a3e]">
-          <div className="px-4 py-2 text-xs font-medium text-white/40 tracking-widest uppercase border-b border-white/10 flex-none">
+        <div className={`flex-col bg-[#2a2a3e] flex-1 min-w-0 min-h-0 ${mobileTab === 'stimulus' ? 'flex' : 'hidden'} lg:flex`}>
+          <div className="px-4 py-2 text-xs font-medium text-white/40 tracking-widest uppercase border-b border-white/10 flex-none hidden lg:block">
             Audience Display
           </div>
 
           <div className="flex-1 overflow-y-auto flex flex-col">
-            <div className="flex-1 flex flex-col items-center justify-center p-6">
+            <div className="flex-1 flex flex-col items-center justify-center p-4 lg:p-6">
               {stimulus?.type === 'dropdown' && <WordGrid words={words} />}
               {stimulus?.type === 'orf' && <PassageDisplay text={stimulus.text} />}
               {stimulus?.type === 'mcq' && (
@@ -467,16 +502,16 @@ export default function AssessingPhase({
             </div>
 
             {/* Slide nav + ORF timer */}
-            <div className="flex items-center justify-between px-6 py-3 border-t border-white/10 flex-none">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 flex-none">
+              <div className="flex items-center gap-2">
                 <button onClick={goPrev} disabled={state.currentStimulusIndex === 0}
                   className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center text-white/60 hover:text-white hover:border-white/40 disabled:opacity-30 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
-                <span className="text-white/50 text-sm">
-                  Slide {allStimuliDone ? totalStimuli : state.currentStimulusIndex + 1} of {totalStimuli}
+                <span className="text-white/50 text-xs">
+                  {allStimuliDone ? totalStimuli : state.currentStimulusIndex + 1} / {totalStimuli}
                 </span>
                 <button onClick={goNext} disabled={allStimuliDone}
                   className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center text-white/60 hover:text-white hover:border-white/40 disabled:opacity-30 transition">
@@ -485,49 +520,16 @@ export default function AssessingPhase({
                   </svg>
                 </button>
               </div>
-
-              {/* ORF timer button */}
-              {stimulus?.type === 'orf' && !allStimuliDone && (
-                <div>
-                  {orfMode === 'idle' && (
-                    <button onClick={startTimer}
-                      className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-semibold text-sm rounded-full transition active:scale-95">
-                      start timer
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </button>
-                  )}
-                  {orfMode === 'error_marking' && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-slate-900 rounded-full">
-                      <span className="font-mono font-bold text-sm tabular-nums">{formatSecs(timerRemaining)}</span>
-                      <button onClick={pauseTimer} className="hover:opacity-70 transition">
-                        {timerStatus === 'running'
-                          ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" /></svg>
-                          : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                        }
-                      </button>
-                      <button onClick={stopTimer} className="w-4 h-4 rounded-full bg-rose-500 hover:bg-rose-400 transition flex-shrink-0" />
-                    </div>
-                  )}
-                  {orfMode === 'stop_point' && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white/60 rounded-full text-sm">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      {skipped ? 'Auto-stopped' : 'Time up'} — mark stop point
-                    </div>
-                  )}
-                </div>
-              )}
+              {timerControls}
             </div>
           </div>
         </div>
 
         {/* Right — Question Window */}
-        <div className="w-80 xl:w-96 flex-none flex flex-col bg-[#3a3a4e] border-l border-white/10">
+        <div className={`flex-col bg-[#3a3a4e] border-white/10 w-full lg:w-80 xl:w-96 lg:flex-none lg:border-l min-h-0 ${mobileTab === 'score' ? 'flex' : 'hidden'} lg:flex`}>
 
-          {/* Video placeholder */}
-          <div className="p-3 border-b border-white/10 flex-none">
+          {/* Video placeholder — hidden on mobile */}
+          <div className="hidden lg:block p-3 border-b border-white/10 flex-none">
             <p className="text-xs text-white/40 font-medium mb-2">Teacher/Student Live Video</p>
             <div className="relative rounded-lg overflow-hidden bg-[#f5f0e8] aspect-video flex items-center justify-center">
               <div className="text-center text-slate-400">
@@ -542,9 +544,7 @@ export default function AssessingPhase({
                   <svg key="mic" className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>,
                   <svg key="phone" className="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" /></svg>,
                 ].map((icon, i) => (
-                  <div key={i} className="w-6 h-6 rounded bg-white/80 flex items-center justify-center shadow-sm">
-                    {icon}
-                  </div>
+                  <div key={i} className="w-6 h-6 rounded bg-white/80 flex items-center justify-center shadow-sm">{icon}</div>
                 ))}
               </div>
             </div>
@@ -558,6 +558,14 @@ export default function AssessingPhase({
               {' · '}Slide {allStimuliDone ? totalStimuli : state.currentStimulusIndex + 1} of {totalStimuli}
             </p>
           </div>
+
+          {/* ORF timer controls on mobile score tab */}
+          {stimulus?.type === 'orf' && !allStimuliDone && (
+            <div className="lg:hidden px-4 py-3 border-b border-white/10 flex-none flex items-center justify-between">
+              <span className="text-white/50 text-xs">Timer</span>
+              {timerControls}
+            </div>
+          )}
 
           {/* Scoring UI */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -602,15 +610,10 @@ export default function AssessingPhase({
           <div className="px-4 py-3 border-t border-white/10 space-y-2 flex-none">
             {!allStimuliDone ? (
               <>
-                <button
-                  onClick={submitAndNext}
-                  disabled={!canSubmit}
-                  className={`w-full py-2.5 rounded-xl text-sm font-semibold transition active:scale-[0.98] ${
-                    canSubmit
-                      ? 'bg-indigo-500 hover:bg-indigo-400 text-white'
-                      : 'bg-white/10 text-white/30 cursor-not-allowed'
-                  }`}
-                >
+                <button onClick={submitAndNext} disabled={!canSubmit}
+                  className={`w-full py-3 rounded-xl text-sm font-semibold transition active:scale-[0.98] ${
+                    canSubmit ? 'bg-indigo-500 hover:bg-indigo-400 text-white' : 'bg-white/10 text-white/30 cursor-not-allowed'
+                  }`}>
                   {state.currentStimulusIndex + 1 >= totalStimuli ? 'Save & Finish Student' : 'Save & Next →'}
                 </button>
                 <button onClick={markAbsent}
@@ -620,7 +623,7 @@ export default function AssessingPhase({
               </>
             ) : (
               <button onClick={nextStudent}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold bg-indigo-500 hover:bg-indigo-400 text-white transition active:scale-[0.98]">
+                className="w-full py-3 rounded-xl text-sm font-semibold bg-indigo-500 hover:bg-indigo-400 text-white transition active:scale-[0.98]">
                 {isLastStudent ? 'View Results →' : 'Next Student →'}
               </button>
             )}
