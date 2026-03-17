@@ -248,25 +248,17 @@ export default function AssessingPhase({
     setMcqResult(existing?.mcqResult ?? null)
   }, [state.currentStimulusIndex, state.currentStudentIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ORF countdown — only runs during error_marking phase
+  // ORF countdown — transitions to stop_point when timer reaches zero
   useEffect(() => {
     if (orfMode !== 'error_marking' || timerStatus !== 'running') return
-    const id = setInterval(() => {
-      setTimerRemaining(r => {
-        if (r <= 1) return 0
-        return r - 1
-      })
-    }, 1000)
-    return () => clearInterval(id)
-  }, [orfMode, timerStatus])
-
-  // Transition to stop_point when timer hits zero
-  useEffect(() => {
-    if (orfMode === 'error_marking' && timerRemaining === 0) {
+    if (timerRemaining <= 0) {
       setTimerStatus('idle')
       setOrfMode('stop_point')
+      return
     }
-  }, [orfMode, timerRemaining])
+    const id = setInterval(() => setTimerRemaining(r => Math.max(0, r - 1)), 1000)
+    return () => clearInterval(id)
+  }, [orfMode, timerStatus, timerRemaining])
 
   function hasConsecutiveErrors(set: Set<number>, threshold = 4): boolean {
     let consecutive = 0

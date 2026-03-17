@@ -1,6 +1,39 @@
 'use client'
 
-import { SessionState, INITIAL_STATE, LS_KEY, scoreLabel, scoreBadge } from '../lib/types'
+import { SessionState, StimulusItem, Score, INITIAL_STATE, LS_KEY, scoreLabel, scoreBadge } from '../lib/types'
+
+// ── WPM helpers ───────────────────────────────────────────────────────────────
+
+function orfWpm(score: Score, stimulus: StimulusItem) {
+  if (score.absent || score.lastWordIndex == null) return null
+  const wordsRead = score.lastWordIndex + 1
+  const errors = score.incorrectWords?.length ?? 0
+  const mins = (stimulus.timerDurationSecs ?? 60) / 60
+  return {
+    wpm: Math.round(wordsRead / mins),
+    cwpm: Math.round(Math.max(0, wordsRead - errors) / mins),
+    wordsRead,
+    errors,
+  }
+}
+
+function avgWpm(scores: Score[], stimulus: StimulusItem): string {
+  const vals = scores
+    .map(s => orfWpm(s, stimulus))
+    .filter((v): v is NonNullable<ReturnType<typeof orfWpm>> => v !== null)
+  if (!vals.length) return '—'
+  return Math.round(vals.reduce((a, b) => a + b.wpm, 0) / vals.length).toString()
+}
+
+function avgCwpm(scores: Score[], stimulus: StimulusItem): string {
+  const vals = scores
+    .map(s => orfWpm(s, stimulus))
+    .filter((v): v is NonNullable<ReturnType<typeof orfWpm>> => v !== null)
+  if (!vals.length) return '—'
+  return Math.round(vals.reduce((a, b) => a + b.cwpm, 0) / vals.length).toString()
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ResultsPhase({
   state, setState,
@@ -8,12 +41,26 @@ export default function ResultsPhase({
   state: SessionState
   setState: React.Dispatch<React.SetStateAction<SessionState>>
 }) {
+  const orfStimuli = state.stimulusItems.filter(s => s.type === 'orf')
+
   function exportCSV() {
-    const headers = ['Student', ...state.stimulusItems.map((s, i) => s.title || `Stimulus ${i + 1}`)]
+    const headers = [
+      'Student',
+      ...state.stimulusItems.flatMap(s =>
+        s.type === 'orf'
+          ? [`${s.title || 'ORF'} — WPM`, `${s.title || 'ORF'} — CWPM`, `${s.title || 'ORF'} — Errors`]
+          : [s.title || 'Stimulus']
+      ),
+    ]
     const rows = state.students.map(student => {
-      const cols = state.stimulusItems.map(stimulus => {
+      const cols = state.stimulusItems.flatMap(stimulus => {
         const s = state.scores.find(sc => sc.studentId === student.id && sc.stimulusId === stimulus.id)
-        return s ? scoreLabel(s) : '—'
+        if (!s) return stimulus.type === 'orf' ? ['—', '—', '—'] : ['—']
+        if (stimulus.type === 'orf') {
+          const m = orfWpm(s, stimulus)
+          return m ? [String(m.wpm), String(m.cwpm), String(m.errors)] : ['—', '—', '—']
+        }
+        return [scoreLabel(s)]
       })
       return [student.name, ...cols]
     })
@@ -36,6 +83,8 @@ export default function ResultsPhase({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 pb-16">
       <div className="max-w-5xl mx-auto px-4 pt-10 space-y-6">
+
+        {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Results</h1>
@@ -56,6 +105,7 @@ export default function ResultsPhase({
           </div>
         </div>
 
+        {/* Summary cards */}
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: 'Students', value: state.students.length },
@@ -69,6 +119,37 @@ export default function ResultsPhase({
           ))}
         </div>
 
+        {/* ORF WPM summary — one card per ORF stimulus */}
+        {orfStimuli.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Oral Reading Fluency</h2>
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(orfStimuli.length, 3)}, 1fr)` }}>
+              {orfStimuli.map(stimulus => {
+                const stimScores = state.scores.filter(s => s.stimulusId === stimulus.id)
+                const wpm = avgWpm(stimScores, stimulus)
+                const cwpm = avgCwpm(stimScores, stimulus)
+                return (
+                  <div key={stimulus.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-500 truncate mb-3">{stimulus.title}</p>
+                    <div className="flex gap-4">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-slate-900">{wpm}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">avg WPM</p>
+                      </div>
+                      <div className="w-px bg-slate-100" />
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-emerald-600">{cwpm}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">avg CWPM</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Main results table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -79,7 +160,9 @@ export default function ResultsPhase({
                     <th key={s.id} className="text-center px-4 py-3.5 font-semibold text-slate-600 whitespace-nowrap">
                       <div>{s.title || `Stimulus ${i + 1}`}</div>
                       <div className="text-xs font-normal text-slate-400 normal-case tracking-normal">
-                        {s.type === 'dropdown' ? 'word list' : s.type === 'orf' ? 'oral reading' : 'question'}
+                        {s.type === 'dropdown' ? 'word list'
+                          : s.type === 'orf' ? 'WPM / CWPM'
+                          : 'question'}
                       </div>
                     </th>
                   ))}
@@ -96,6 +179,33 @@ export default function ResultsPhase({
                       if (!s) return (
                         <td key={stimulus.id} className="px-4 py-3 text-center text-slate-300">—</td>
                       )
+                      if (stimulus.type === 'orf') {
+                        if (s.absent) return (
+                          <td key={stimulus.id} className="px-4 py-3 text-center">
+                            <span className="inline-block text-xs font-bold px-3 py-1.5 rounded-full bg-slate-100 text-slate-400">A</span>
+                          </td>
+                        )
+                        const m = orfWpm(s, stimulus)
+                        return (
+                          <td key={stimulus.id} className="px-4 py-3 text-center">
+                            {m ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <span className="text-xs font-bold text-slate-700">{m.wpm}</span>
+                                  <span className="text-xs text-slate-400">/</span>
+                                  <span className="text-xs font-bold text-emerald-600">{m.cwpm}</span>
+                                </div>
+                                <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                                  {m.errors > 0 && <span className="text-rose-400">{m.errors}✗</span>}
+                                  {s.skipped && <span className="text-rose-400">skip</span>}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 text-xs">no stop point</span>
+                            )}
+                          </td>
+                        )
+                      }
                       return (
                         <td key={stimulus.id} className="px-4 py-3 text-center">
                           <span className={`inline-block text-xs font-bold px-3 py-1.5 rounded-full ${scoreBadge(s)}`}>
@@ -111,12 +221,12 @@ export default function ResultsPhase({
           </div>
         </div>
 
+        {/* Legend */}
         <div className="flex flex-wrap gap-4 text-xs text-slate-500">
           {[
             { color: 'bg-emerald-100', label: '✓ Correct (MCQ)' },
             { color: 'bg-rose-100', label: '✗ Wrong / errors' },
             { color: 'bg-indigo-100', label: 'Number (word list)' },
-            { color: 'bg-amber-100', label: 'Some errors (ORF)' },
             { color: 'bg-slate-100', label: 'A = Absent / NR' },
           ].map(l => (
             <span key={l.label} className="flex items-center gap-2">
@@ -124,6 +234,12 @@ export default function ResultsPhase({
               {l.label}
             </span>
           ))}
+          {orfStimuli.length > 0 && (
+            <span className="flex items-center gap-2">
+              <span className="font-semibold text-slate-700">WPM</span> = words/min ·
+              <span className="font-semibold text-emerald-600">CWPM</span> = correct words/min
+            </span>
+          )}
         </div>
       </div>
     </div>
