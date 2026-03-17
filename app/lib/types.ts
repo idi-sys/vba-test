@@ -18,6 +18,7 @@ export interface Score {
   studentId: number
   stimulusId: number
   absent?: boolean
+  skipped?: boolean        // orf: auto-stopped due to 4 consecutive errors
   dropdownValue?: number
   incorrectWords?: number[]
   lastWordIndex?: number | null
@@ -69,7 +70,8 @@ export function scoreLabel(score: Score): string {
     const read = score.lastWordIndex !== null && score.lastWordIndex !== undefined
       ? `${score.lastWordIndex + 1} read`
       : ''
-    return [read, errs > 0 ? `${errs}✗` : '0✗'].filter(Boolean).join(' · ')
+    const skip = score.skipped ? 'SKIP' : ''
+    return [skip, read, errs > 0 ? `${errs}✗` : '0✗'].filter(Boolean).join(' · ')
   }
   return '—'
 }

@@ -68,18 +68,39 @@ function DropdownScoring({
 }
 
 function OrfScoring({
-  words, mode, incorrectWords, lastWordIndex, onToggleIncorrect, onSetStopPoint,
+  words, mode, skipped, incorrectWords, lastWordIndex, onToggleIncorrect, onSetStopPoint,
 }: {
   words: string[]
-  mode: 'error_marking' | 'stop_point'
+  mode: 'idle' | 'error_marking' | 'stop_point'
+  skipped: boolean
   incorrectWords: Set<number>
   lastWordIndex: number | null
   onToggleIncorrect: (i: number) => void
   onSetStopPoint: (i: number) => void
 }) {
+  if (mode === 'idle') {
+    return (
+      <div className="space-y-3">
+        <p className="text-white/50 text-sm font-semibold leading-snug">
+          Q. Mark words incorrectly read
+        </p>
+        <p className="text-white/30 text-xs">Start the timer to begin marking words.</p>
+      </div>
+    )
+  }
+
   const isErrorMode = mode === 'error_marking'
+
   return (
     <div className="space-y-3">
+      {skipped && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-500/20 border border-rose-500/40">
+          <svg className="w-3.5 h-3.5 text-rose-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-rose-300 text-xs font-medium">Auto-stopped — 4 consecutive errors</p>
+        </div>
+      )}
       <p className="text-white/80 text-sm font-semibold leading-snug">
         {isErrorMode
           ? 'Q. Mark words incorrectly read'
@@ -89,15 +110,20 @@ function OrfScoring({
         {words.map((word, i) => {
           const isIncorrect = incorrectWords.has(i)
           const isStop = lastWordIndex === i
-          const highlight = isErrorMode ? isIncorrect : isStop
+          // In stop_point mode: show both incorrect (red) and stop point (amber)
+          const chipClass = isErrorMode
+            ? isIncorrect
+              ? 'bg-rose-500 border-rose-400 text-white'
+              : 'bg-white/10 border-white/20 text-white/80 hover:bg-white/20'
+            : isStop
+              ? 'bg-amber-400 border-amber-300 text-slate-900'
+              : isIncorrect
+                ? 'bg-rose-500/60 border-rose-400/60 text-white/80'
+                : 'bg-white/10 border-white/20 text-white/80 hover:bg-white/20'
           return (
             <button key={i}
               onClick={() => isErrorMode ? onToggleIncorrect(i) : onSetStopPoint(i)}
-              className={`px-2.5 py-1.5 rounded-lg text-sm font-medium border transition active:scale-95 ${
-                highlight
-                  ? 'bg-rose-500 border-rose-400 text-white'
-                  : 'bg-white/10 border-white/20 text-white/80 hover:bg-white/20'
-              }`}>
+              className={`px-2.5 py-1.5 rounded-lg text-sm font-medium border transition active:scale-95 ${chipClass}`}>
               {word}
             </button>
           )
@@ -111,6 +137,7 @@ function OrfScoring({
       {!isErrorMode && lastWordIndex !== null && (
         <p className="text-amber-300 text-xs">
           Stopped at word {lastWordIndex + 1}: &ldquo;{words[lastWordIndex]}&rdquo;
+          {incorrectWords.size > 0 && ` · ${incorrectWords.size} error${incorrectWords.size > 1 ? 's' : ''}`}
         </p>
       )}
     </div>
@@ -196,7 +223,8 @@ export default function AssessingPhase({
   const timerDuration = stimulus?.timerDurationSecs ?? 60
   const [timerStatus, setTimerStatus] = useState<'idle' | 'running' | 'paused'>('idle')
   const [timerRemaining, setTimerRemaining] = useState(timerDuration)
-  const [orfMode, setOrfMode] = useState<'error_marking' | 'stop_point'>('error_marking')
+  const [orfMode, setOrfMode] = useState<'idle' | 'error_marking' | 'stop_point'>('idle')
+  const [skipped, setSkipped] = useState(false)
 
   // Per-stimulus scoring state
   const [dropdownValue, setDropdownValue] = useState<number | ''>('')
@@ -208,7 +236,8 @@ export default function AssessingPhase({
   useEffect(() => {
     setTimerStatus('idle')
     setTimerRemaining(stimulus?.timerDurationSecs ?? 60)
-    setOrfMode('error_marking')
+    setOrfMode('idle')
+    setSkipped(false)
 
     const existing = scoresRef.current.find(
       s => s.studentId === student?.id && s.stimulusId === stimulus?.id
@@ -219,19 +248,42 @@ export default function AssessingPhase({
     setMcqResult(existing?.mcqResult ?? null)
   }, [state.currentStimulusIndex, state.currentStudentIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ORF countdown
+  // ORF countdown — only runs during error_marking phase
   useEffect(() => {
-    if (timerStatus !== 'running') return
-    if (timerRemaining <= 0) { setTimerStatus('idle'); return }
-    const id = setInterval(() => setTimerRemaining(r => {
-      if (r <= 1) { setTimerStatus('idle'); return 0 }
-      return r - 1
-    }), 1000)
+    if (orfMode !== 'error_marking' || timerStatus !== 'running') return
+    const id = setInterval(() => {
+      setTimerRemaining(r => {
+        if (r <= 1) return 0
+        return r - 1
+      })
+    }, 1000)
     return () => clearInterval(id)
-  }, [timerStatus, timerRemaining])
+  }, [orfMode, timerStatus])
+
+  // Transition to stop_point when timer hits zero
+  useEffect(() => {
+    if (orfMode === 'error_marking' && timerRemaining === 0) {
+      setTimerStatus('idle')
+      setOrfMode('stop_point')
+    }
+  }, [orfMode, timerRemaining])
+
+  function hasConsecutiveErrors(set: Set<number>, threshold = 4): boolean {
+    let consecutive = 0
+    const max = set.size > 0 ? Math.max(...set) : -1
+    for (let i = 0; i <= max; i++) {
+      if (set.has(i)) {
+        consecutive++
+        if (consecutive >= threshold) return true
+      } else {
+        consecutive = 0
+      }
+    }
+    return false
+  }
 
   function startTimer() {
-    setOrfMode('stop_point')
+    setOrfMode('error_marking')
     setTimerStatus('running')
   }
 
@@ -241,13 +293,19 @@ export default function AssessingPhase({
 
   function stopTimer() {
     setTimerStatus('idle')
-    setTimerRemaining(0)
+    setOrfMode('stop_point')
   }
 
   function toggleIncorrectWord(idx: number) {
     setIncorrectWords(prev => {
       const next = new Set(prev)
       if (next.has(idx)) { next.delete(idx) } else { next.add(idx) }
+      // Check for 4 consecutive errors → auto-stop
+      if (!prev.has(idx) && hasConsecutiveErrors(next)) {
+        setTimerStatus('idle')
+        setOrfMode('stop_point')
+        setSkipped(true)
+      }
       return next
     })
   }
@@ -259,7 +317,11 @@ export default function AssessingPhase({
   function buildScore(): Omit<Score, 'studentId' | 'stimulusId'> | null {
     if (!stimulus) return null
     if (stimulus.type === 'dropdown') return { dropdownValue: dropdownValue === '' ? 0 : dropdownValue }
-    if (stimulus.type === 'orf') return { incorrectWords: Array.from(incorrectWords), lastWordIndex }
+    if (stimulus.type === 'orf') return {
+      incorrectWords: Array.from(incorrectWords),
+      lastWordIndex,
+      ...(skipped ? { skipped: true } : {}),
+    }
     if (stimulus.type === 'mcq' && mcqResult) return { mcqResult }
     return null
   }
@@ -305,7 +367,7 @@ export default function AssessingPhase({
 
   const canSubmit = stimulus && (
     stimulus.type === 'dropdown' ? dropdownValue !== ''
-    : stimulus.type === 'orf' ? true
+    : stimulus.type === 'orf' ? orfMode === 'stop_point'
     : mcqResult !== null
   )
 
@@ -435,7 +497,7 @@ export default function AssessingPhase({
               {/* ORF timer button */}
               {stimulus?.type === 'orf' && !allStimuliDone && (
                 <div>
-                  {timerStatus === 'idle' && timerRemaining === timerDuration && (
+                  {orfMode === 'idle' && (
                     <button onClick={startTimer}
                       className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-semibold text-sm rounded-full transition active:scale-95">
                       start timer
@@ -445,7 +507,7 @@ export default function AssessingPhase({
                       </svg>
                     </button>
                   )}
-                  {(timerStatus !== 'idle' || timerRemaining < timerDuration) && (
+                  {orfMode === 'error_marking' && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-slate-900 rounded-full">
                       <span className="font-mono font-bold text-sm tabular-nums">{formatSecs(timerRemaining)}</span>
                       <button onClick={pauseTimer} className="hover:opacity-70 transition">
@@ -455,6 +517,12 @@ export default function AssessingPhase({
                         }
                       </button>
                       <button onClick={stopTimer} className="w-4 h-4 rounded-full bg-rose-500 hover:bg-rose-400 transition flex-shrink-0" />
+                    </div>
+                  )}
+                  {orfMode === 'stop_point' && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white/60 rounded-full text-sm">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      {skipped ? 'Auto-stopped' : 'Time up'} — mark stop point
                     </div>
                   )}
                 </div>
@@ -510,6 +578,7 @@ export default function AssessingPhase({
                   <OrfScoring
                     words={words}
                     mode={orfMode}
+                    skipped={skipped}
                     incorrectWords={incorrectWords}
                     lastWordIndex={lastWordIndex}
                     onToggleIncorrect={toggleIncorrectWord}
